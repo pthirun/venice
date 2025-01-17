@@ -70,7 +70,7 @@ public abstract class NativeMetadataRepository
   private final Map<String, StoreConfig> storeConfigMap = new VeniceConcurrentHashMap<>();
   // Local cache for key/value schemas. SchemaData supports one key schema per store only, which may need to be changed
   // for key schema evolvability.
-  private final Map<String, SchemaData> schemaMap = new VeniceConcurrentHashMap<>();
+  protected final Map<String, SchemaData> schemaMap = new VeniceConcurrentHashMap<>();
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
   private final Set<StoreDataChangedListener> listeners = new CopyOnWriteArraySet<>();
   private final AtomicLong totalStoreReadQuota = new AtomicLong();
@@ -181,7 +181,7 @@ public abstract class NativeMetadataRepository
       }
       Store newStore = fetchStoreFromRemote(storeName, storeConfig.getCluster());
       putStore(newStore);
-      getAndCacheSchemaDataFromSystemStore(storeName);
+      getAndCacheSchemaData(storeName);
       nativeMetadataRepositoryStats.updateCacheTimestamp(storeName, clock.millis());
       return newStore;
     } catch (ServiceDiscoveryException | MissingKeyInStoreMetadataException e) {
@@ -516,7 +516,7 @@ public abstract class NativeMetadataRepository
     }
   }
 
-  protected SchemaData getAndCacheSchemaDataFromSystemStore(String storeName) {
+  protected SchemaData getAndCacheSchemaData(String storeName) {
     if (!hasStore(storeName)) {
       throw new VeniceNoStoreException(storeName);
     }
@@ -532,7 +532,7 @@ public abstract class NativeMetadataRepository
   private SchemaData getSchemaDataFromReadThroughCache(String storeName) throws VeniceNoStoreException {
     SchemaData schemaData = schemaMap.get(storeName);
     if (schemaData == null) {
-      schemaData = getAndCacheSchemaDataFromSystemStore(storeName);
+      schemaData = getAndCacheSchemaData(storeName);
     }
     return schemaData;
   }

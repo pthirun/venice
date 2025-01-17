@@ -9,12 +9,14 @@ import com.linkedin.venice.meta.Store;
 import com.linkedin.venice.meta.StoreConfig;
 import com.linkedin.venice.meta.ZKStore;
 import com.linkedin.venice.metadata.response.StorePropertiesResponseRecord;
+import com.linkedin.venice.schema.SchemaData;
 import com.linkedin.venice.serializer.FastSerializerDeserializerFactory;
 import com.linkedin.venice.serializer.RecordDeserializer;
 import com.linkedin.venice.systemstore.schemas.StoreClusterConfig;
 import com.linkedin.venice.systemstore.schemas.StoreMetaKey;
 import com.linkedin.venice.systemstore.schemas.StoreMetaValue;
 import com.linkedin.venice.systemstore.schemas.StoreProperties;
+import com.linkedin.venice.systemstore.schemas.StoreValueSchemas;
 import com.linkedin.venice.utils.VeniceProperties;
 import com.linkedin.venice.utils.concurrent.VeniceConcurrentHashMap;
 import java.util.Map;
@@ -58,6 +60,7 @@ public class RequestBasedMetaRepository extends NativeMetadataRepository {
   @Override
   protected Store fetchStoreFromRemote(String storeName, String clusterName) {
     // Fetch store, bypass cache
+    System.out.println("HERE HERE HERE fetchStoreFromRemote: " + storeName + " " + clusterName);
     StorePropertiesResponseRecord record = fetchAndCacheStorePropertiesResponseRecord(storeName);
     StoreProperties storeProperties = record.storeMetaValue.storeProperties;
     return new ZKStore(storeProperties);
@@ -78,17 +81,23 @@ public class RequestBasedMetaRepository extends NativeMetadataRepository {
   private StorePropertiesResponseRecord fetchAndCacheStorePropertiesResponseRecord(String storeName) {
 
     // Request
-    // TODO PRANAV lastKnownSchemaId param
+    int maxValueSchemaId = getMaxValueSchemaId(storeName);
+    System.out.println("HERE HERE HERE  fetchAndCacheStorePropertiesResponseRecord: ID: " + maxValueSchemaId);
     D2TransportClient d2TransportClient = getD2TransportClient(storeName);
     String requestBasedStorePropertiesURL = QueryAction.STORE_PROPERTIES.toString().toLowerCase() + "/" + storeName;
+    if (maxValueSchemaId > SchemaData.UNKNOWN_SCHEMA_ID) {
+      requestBasedStorePropertiesURL += "/" + maxValueSchemaId;
+    }
+    System.out
+        .println("HERE HERE HERE  fetchAndCacheStorePropertiesResponseRecord: UL: " + requestBasedStorePropertiesURL);
+
     TransportClientResponse response;
     try {
       response = d2TransportClient.get(requestBasedStorePropertiesURL).get();
     } catch (Exception e) {
       throw new RuntimeException(
-          "Encountered exception while trying to send store properties request to: " + requestBasedStorePropertiesURL
-              + "/" + requestBasedStorePropertiesURL,
-          e);
+          "Encountered exception while trying to send store properties request to " + requestBasedStorePropertiesURL
+              + ": " + e);
     }
 
     // Deserialize
@@ -97,8 +106,12 @@ public class RequestBasedMetaRepository extends NativeMetadataRepository {
         .getFastAvroSpecificDeserializer(writerSchema, StorePropertiesResponseRecord.class);
     StorePropertiesResponseRecord record = recordDeserializer.deserialize(response.getBody());
 
+    System.out.println(
+        "HERE HERE HERE  fetchAndCacheStorePropertiesResponseRecord: RC:"
+            + record.storeMetaValue.storeValueSchemas.valueSchemaMap.size());
+
     // Cache
-    storePropertiesRecordMap.put(storeName, record);
+    cacheStorePropertiesRecord(storeName, record);
 
     return record;
   }
@@ -115,5 +128,38 @@ public class RequestBasedMetaRepository extends NativeMetadataRepository {
       d2TransportClientMap.put(serverD2ServiceName, d2TransportClient);
       return d2TransportClient;
     }
+  }
+
+  private int getMaxValueSchemaId(String storeName) {
+    if (!schemaMap.containsKey(storeName)) {
+      return SchemaData.UNKNOWN_SCHEMA_ID;
+    }
+    return schemaMap.get(storeName).getMaxValueSchemaId();
+  }
+
+  private void cacheStorePropertiesRecord(String storeName, StorePropertiesResponseRecord record) {
+    if (!storePropertiesRecordMap.containsKey(storeName)) {
+      // New record
+      storePropertiesRecordMap.put(storeName, record);
+      return;
+    }
+
+    // Add current known value schemas to new record
+    StoreValueSchemas currentStoreValueSchemas =
+        storePropertiesRecordMap.get(storeName).getStoreMetaValue().getStoreValueSchemas();
+
+    StoreValueSchemas newStoreValueSchemas = record.getStoreMetaValue().getStoreValueSchemas();
+
+    // Combine Value Schemas
+    for (Map.Entry<CharSequence, CharSequence> entry: currentStoreValueSchemas.getValueSchemaMap().entrySet()) {
+      if (newStoreValueSchemas.getValueSchemaMap().containsKey(entry.getKey())) {
+        // New record has schema, skip
+        continue;
+      }
+      // append existing schema
+      record.storeMetaValue.storeValueSchemas.valueSchemaMap.put(entry.getKey(), entry.getValue());
+    }
+
+    storePropertiesRecordMap.put(storeName, record);
   }
 }
