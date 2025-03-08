@@ -16,11 +16,13 @@ import com.linkedin.venice.schema.SchemaData;
 import com.linkedin.venice.schema.SchemaEntry;
 import com.linkedin.venice.serializer.FastAvroSerializer;
 import com.linkedin.venice.serializer.RecordSerializer;
+import com.linkedin.venice.serializer.SerializerDeserializerFactory;
 import com.linkedin.venice.systemstore.schemas.StoreKeySchemas;
 import com.linkedin.venice.systemstore.schemas.StoreMetaValue;
 import com.linkedin.venice.systemstore.schemas.StoreValueSchemas;
 import com.linkedin.venice.utils.TestUtils;
 import com.linkedin.venice.utils.concurrent.VeniceConcurrentHashMap;
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
@@ -39,6 +41,7 @@ public class RequestBasedMetaRepositoryTest {
   private Store store;
   private static final String D2_SERVICE_NAME = "D2_SERVICE_NAME";
   private StorePropertiesResponseRecord MOCK_STORE_PROPERTIES_RESPONSE_RECORD;
+  private StoreMetaValue MOCK_STORE_META_VALUE;
 
   // Mock schemas
   private static final String INT_KEY_SCHEMA = "\"int\"";
@@ -102,20 +105,17 @@ public class RequestBasedMetaRepositoryTest {
 
     // Mock RequestBasedMetaRepository
     RequestBasedMetaRepository requestBasedMetaRepository = getMockRequestBasedMetaRepository();
-    when(requestBasedMetaRepository.fetchAndCacheStorePropertiesResponseRecord(store.getName())).thenCallRealMethod();
+    when(requestBasedMetaRepository.fetchAndCacheStoreMetaValue(store.getName())).thenCallRealMethod();
 
-    // Test FetchAndCacheStorePropertiesResponseRecord
-    StorePropertiesResponseRecord record =
-        requestBasedMetaRepository.fetchAndCacheStorePropertiesResponseRecord(store.getName());
-    Assert.assertNotNull(record);
-    Assert.assertNotNull(record.getStoreMetaValue());
-    Assert.assertNotNull(record.getStoreMetaValue().getStoreProperties());
-    Assert.assertEquals(record.getStoreMetaValue().getStoreProperties().getName().toString(), store.getName());
-    Assert.assertEquals(record.getStoreMetaValue().getStoreProperties().getOwner().toString(), store.getOwner());
-    Assert
-        .assertEquals(record.getStoreMetaValue().getStoreProperties().getVersions().size(), store.getVersions().size());
-    Assert.assertEquals(record.getStoreMetaValue().getStoreKeySchemas().getKeySchemaMap().size(), 1);
-    Assert.assertEquals(record.getStoreMetaValue().getStoreValueSchemas().getValueSchemaMap().size(), 2);
+    // Test FetchAndCacheStoreMetaValue
+    StoreMetaValue storeMetaValue = requestBasedMetaRepository.fetchAndCacheStoreMetaValue(store.getName());
+    Assert.assertNotNull(storeMetaValue);
+    Assert.assertNotNull(storeMetaValue.getStoreProperties());
+    Assert.assertEquals(storeMetaValue.getStoreProperties().getName().toString(), store.getName());
+    Assert.assertEquals(storeMetaValue.getStoreProperties().getOwner().toString(), store.getOwner());
+    Assert.assertEquals(storeMetaValue.getStoreProperties().getVersions().size(), store.getVersions().size());
+    Assert.assertEquals(storeMetaValue.getStoreKeySchemas().getKeySchemaMap().size(), 1);
+    Assert.assertEquals(storeMetaValue.getStoreValueSchemas().getValueSchemaMap().size(), 2);
   }
 
   @Test
@@ -148,10 +148,9 @@ public class RequestBasedMetaRepositoryTest {
 
     // Mock RequestBasedMetaRepository
     RequestBasedMetaRepository requestBasedMetaRepository = getMockRequestBasedMetaRepository();
-    doCallRealMethod().when(requestBasedMetaRepository)
-        .cacheStoreSchema(store.getName(), MOCK_STORE_PROPERTIES_RESPONSE_RECORD);
+    doCallRealMethod().when(requestBasedMetaRepository).cacheStoreSchema(store.getName(), MOCK_STORE_META_VALUE);
 
-    requestBasedMetaRepository.cacheStoreSchema(store.getName(), MOCK_STORE_PROPERTIES_RESPONSE_RECORD);
+    requestBasedMetaRepository.cacheStoreSchema(store.getName(), MOCK_STORE_META_VALUE);
     SchemaData schemaData = requestBasedMetaRepository.storeSchemaMap.get(store.getName());
     Assert.assertNotNull(schemaData);
     Assert.assertEquals(schemaData.getKeySchema().getSchemaStr(), INT_KEY_SCHEMA);
@@ -228,8 +227,12 @@ public class RequestBasedMetaRepositoryTest {
 
     storeMetaValue.setStoreValueSchemas(new StoreValueSchemas(storeValueSchemas));
 
-    record.setStoreMetaValue(storeMetaValue);
+    RecordSerializer<StoreMetaValue> serializer =
+        SerializerDeserializerFactory.getAvroGenericSerializer(StoreMetaValue.SCHEMA$);
+    byte[] serialized = serializer.serialize(storeMetaValue);
+    record.setStoreMetaValue(ByteBuffer.wrap(serialized));
 
+    MOCK_STORE_META_VALUE = storeMetaValue;
     MOCK_STORE_PROPERTIES_RESPONSE_RECORD = record;
   }
 }
