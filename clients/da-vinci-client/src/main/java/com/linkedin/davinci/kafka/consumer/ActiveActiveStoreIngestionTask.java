@@ -1479,8 +1479,9 @@ public class ActiveActiveStoreIngestionTask extends LeaderFollowerStoreIngestion
         rtPositionsByBroker);
   }
 
+  // TODO PRANAV calculateRewindStartTime
   private long calculateRewindStartTime(PartitionConsumptionState partitionConsumptionState) {
-    long rewindStartTime;
+    long rewindStartTime; // TODO PRANAV, just set this??
     long rewindTimeInMs = hybridStoreConfig.get().getRewindTimeInSeconds() * Time.MS_PER_SECOND;
     if (isDataRecovery) {
       // Override the user rewind if the version is under data recovery to avoid data loss when user have short rewind.

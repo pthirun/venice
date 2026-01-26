@@ -493,6 +493,7 @@ public class VenicePushJob implements AutoCloseable {
     pushJobSettingToReturn.rewindTimeInSecondsOverride = props.getLong(REWIND_TIME_IN_SECONDS_OVERRIDE, NOT_SET);
 
     // If we didn't specify a rewind time
+    // TODO PRANAV add the REWIND_EPOCH_TIME_IN_SECONDS_OVERRIDE field to PushJobSetting
     if (pushJobSettingToReturn.rewindTimeInSecondsOverride == NOT_SET) {
       // But we did specify a rewind time epoch timestamp
       long rewindTimestamp = props.getLong(REWIND_EPOCH_TIME_IN_SECONDS_OVERRIDE, NOT_SET);
@@ -758,6 +759,7 @@ public class VenicePushJob implements AutoCloseable {
         validateAndSetRmdSchemas(controllerClient, pushJobSetting);
       }
 
+      // TODO PRANAV handle epoch
       Optional<ByteBuffer> optionalCompressionDictionary = getCompressionDictionary();
       if (pushJobSetting.isSourceKafka) {
         if (pushJobSetting.sourceKafkaInputVersionInfo.getHybridStoreConfig() != null
@@ -2376,7 +2378,7 @@ public class VenicePushJob implements AutoCloseable {
             dictionary,
             Optional.ofNullable(setting.sourceGridFabric),
             setting.livenessHeartbeatEnabled,
-            setting.rewindTimeInSecondsOverride,
+            setting.rewindTimeInSecondsOverride, // TODO PRANAV add epoch
             setting.deferVersionSwap,
             setting.targetedRegions,
             pushJobSetting.repushSourceVersion,
