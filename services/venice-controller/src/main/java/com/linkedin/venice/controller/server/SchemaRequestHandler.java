@@ -2,6 +2,7 @@ package com.linkedin.venice.controller.server;
 
 import com.linkedin.venice.controller.Admin;
 import com.linkedin.venice.controller.ControllerRequestHandlerDependencies;
+import com.linkedin.venice.exceptions.VeniceException;
 import com.linkedin.venice.protocols.controller.ClusterStoreGrpcInfo;
 import com.linkedin.venice.protocols.controller.GetValueSchemaGrpcRequest;
 import com.linkedin.venice.protocols.controller.GetValueSchemaGrpcResponse;
@@ -36,7 +37,19 @@ public class SchemaRequestHandler {
     int schemaId = request.getSchemaId();
     LOGGER
         .info("Getting value schema for store: {} in cluster: {} with schema id: {}", storeName, clusterName, schemaId);
-    SchemaEntry valueSchemaEntry = admin.getValueSchema(clusterName, storeName, schemaId);
+
+    SchemaEntry valueSchemaEntry;
+    try {
+      valueSchemaEntry = admin.getValueSchema(clusterName, storeName, schemaId);
+    } catch (VeniceException e) {
+      // Convert VeniceException to IllegalArgumentException for consistent error handling
+      // This handles cases where the schema doesn't exist or other validation failures
+      LOGGER.warn("Failed to get value schema for store: {} schema id: {}", storeName, schemaId, e);
+      throw new IllegalArgumentException(
+          "Value schema for schema id: " + schemaId + " of store: " + storeName + " doesn't exist: " + e.getMessage(),
+          e);
+    }
+
     if (valueSchemaEntry == null) {
       throw new IllegalArgumentException(
           "Value schema for schema id: " + schemaId + " of store: " + storeName + " doesn't exist");
